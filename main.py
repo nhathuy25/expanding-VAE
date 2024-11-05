@@ -13,9 +13,10 @@ model.construct(encoder_config, decoder_config, False)
 print(model)
 
 x = torch.randn(64, 784)
+'''
 x_recon, mu, log_var = model(x.to(DEVICE))
-
 print(x.shape)
 print(x_recon.shape)
 print(mu.shape)
 print(log_var.shape)
+'''

@@ -8,7 +8,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch import nn
-from model import VAE
+from model import VAE, VAE_expanding
 from tqdm import tqdm
 import math
 
@@ -27,10 +27,12 @@ dataset = datasets.MNIST(root='dataset/', train=True, transform=data_transform, 
 train_loader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
 model = VAE(INPUT_DIM, HIDDEN_DIM, LATENT_DIM).to(DEVICE)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+encoder_config = [256,  32]
+decoder_config = [256, 784]
+model = VAE_expanding((28, 28), device=DEVICE)
+model.construct(encoder_config, decoder_config, False)
 
-# loss function
-loss_fn = nn.BCELoss(reduction='sum')
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 #Verify pixels in data loader:
 train_loader = DataLoader(
@@ -43,6 +45,14 @@ for (x, y) in train_loader:
     print('Mean Pixel Value {} \nPixel Values Std: {}'.format(x.float().mean(), x.float().std()))
     break
 
+BCE_loss = nn.BCELoss()
+
+def loss_function(x, x_hat, mean, log_var):
+    reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, reduction='sum')
+    KLD      = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
+
+    return reproduction_loss + KLD
+
 # Trainning
 model.train()
 for epoch in range(NUM_EPOCHS):
@@ -51,15 +61,15 @@ for epoch in range(NUM_EPOCHS):
     for batch_idx, (x, _) in loop:
         # flatten the imput image
         x = x.view(-1, 28*28)
+        print(x.shape)
         x = x.to(DEVICE)
         x_recon, mu, log_var = model(x)
+        print(x_recon.shape)
 
         # compute loss functions    
-        reproduction_loss = loss_fn(x_recon, x)
-        KL_div = - 0.5 * torch.sum(1+ log_var - mu.pow(2) - log_var.exp())
-
+        total_loss = loss_function(x, x_recon, mu, log_var)
+        
         # backprop
-        total_loss = reproduction_loss + KL_div
         train_loss += total_loss.item()
 
         #print(f"Total loss before .item(): {total_loss}")

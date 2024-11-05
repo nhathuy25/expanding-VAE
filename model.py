@@ -119,6 +119,7 @@ class VAE_expanding(nn.Module):
                     nn.init.kaiming_normal_(self.hidden_to_logvar.weight, nonlinearity='relu')
                     
                     '''
+                    # !!! PROBLEM: the following code will add the last 2 layers to the encoder, but it will not be able to extract the mean and logvar since its belongs to a Sequential
                     # Adding the last 2 layers to the encoder
                     encoderLayers.append(self.hidden_to_mu)
                     encoderLayers.append(self.hidden_to_logvar)
@@ -137,7 +138,7 @@ class VAE_expanding(nn.Module):
 
                 # Add a linear fully connected layer and initialize the weights with He initialization
                 fc = nn.Linear(in_features, out_features, bias=True)
-                #decoderLayers.append(nn.init.kaiming_normal_(fc.weight, nonlinearity='relu'))
+                nn.init.kaiming_normal_(fc.weight, nonlinearity='relu')
                 decoderLayers.append(fc)
 
                 # Add the ReLU activation function
@@ -157,27 +158,57 @@ class VAE_expanding(nn.Module):
         # Flatten the input image
         x = x.view(x.size(0), -1)
         x = x.to(self.device)
-        print("start encode")
+        #print("start encode")
         # Pass the images into the encoder part (not include the latent layer)
         encoder_output = self.encoder(x)
         encoder_output = encoder_output.to(self.device)
-        print("done 1st encode")
+        #print("done 1st encode")
 
         # Extract the mean and logvar of the latent code
         self.hidden_to_mu = self.hidden_to_mu.to(self.device)
         self.hidden_to_logvar = self.hidden_to_logvar.to(self.device)
         mu = self.relu(self.hidden_to_mu(encoder_output))
         log_var = self.relu(self.hidden_to_logvar(encoder_output))
-        print("done 2nd encode")
+        #print("done 2nd encode")
 
         # Reparametrization trick
         z = self.reparametrization(mu, log_var)
         
         # Pass the latent code into the decoder part
         x_recon = self.decoder(z)
-        x_recon = x_recon.view(x.size(0), *self.input_size)
-        
+
         return x_recon, mu, log_var
+    '''
+    Function expand_layer to add more neurons to a defined layer
+    '''
+    def expand_layer(self, layer_index, nb_neuron_increase, bool_encoder = True):
+        if bool_encoder:
+            layer = self.encoder[layer_index]
+        else:
+            layer = self.decoder[layer_index]
+        old_weight = layer.weight
+        old_bias = layer.bias.data if layer.bias is not None else None
+        old_out_features = layer.out_features
+        new_out_features = old_out_features + nb_neuron_increase
+
+        new_layer = nn.Linear(layer.in_features, new_out_features, bias=(old_bias is not None)).to(self.device)
+        
+        # Copy the old weights and biases to the new layer
+        with torch.no_grad():
+            new_layer.weight[:old_out_features] = old_weight
+            if old_out_features < new_out_features:
+                nn.init.kaiming_normal_(new_layer.weight[old_out_features:], mode='fan_in', nonlinearity='relu')
+        
+        if old_bias is not None:
+            with torch.no_grad():
+                nn.init.zeros_(new_layer.bias)
+                new_layer.bias[:old_out_features] = old_bias
+
+        # Replace the current layer with the new created layer
+        if bool_encoder:
+            self.encoder[layer_index] = new_layer.to(self.device)
+        else:
+            self.decoder[layer_index] = new_layer.to(self.device)
 
 if __name__ == "__main__":
 

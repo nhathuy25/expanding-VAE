@@ -55,11 +55,15 @@ class VAE(nn.Module):
 VAE model supporting expanding method
 """
 class VAE_expanding(nn.Module):
-    def __init__(self, device):
+    def __init__(self, input_size, device):
         super(VAE_expanding, self).__init__()
 
-        self.device = device
+        # Check if the input size is a tuple of 2 elements
+        assert isinstance(input_size, tuple) and len(input_size) == 2
+        self.input_size = input_size
 
+        self.device = device
+        
         #Initialize 2 parts of the model: encoder and decoder
         self.encoder = nn.Sequential()
         self.decoder = nn.Sequential()
@@ -67,8 +71,6 @@ class VAE_expanding(nn.Module):
         #Define activation function:
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
-
-        self.input_size = (28, 28)
 
     """
     Function construct() to build the model
@@ -78,13 +80,13 @@ class VAE_expanding(nn.Module):
             - decoder_config: list of hidden layers in the decoder - to be verified if needed or not, can be inversed of encoder_config
             - bool_convolution: if True, the model will be built with convolutional layers, otherwise, fully connected layers
     """
-    def construct(self, input_size=(28,28), encoder_config=[], decoder_config=[], bool_convolution = False):
+    def construct(self, encoder_config=[], decoder_config=[], bool_convolution = False):
         if bool_convolution == False:
             assert len(encoder_config) != 0 and len(decoder_config) != 0   
 
             #Build the encoder
             encoderLayers = []
-            in_features = input_size[0]*input_size[1]
+            in_features = self.input_size[0]*self.input_size[1]
 
             # Add hidden layers to the encoder part and adding the ReLU activation function
             for iLayer in range(0,len(encoder_config)):
@@ -93,8 +95,9 @@ class VAE_expanding(nn.Module):
                     out_features = encoder_config[iLayer]
 
                     # Add a linear fully connected layer and initialize the weights with He initialization
-                    fc = nn.Linear(in_features, out_features, with_bias=True)
-                    encoderLayers.append(nn.init.kaiming_normal_(fc.weight, nonlinearity='relu'))
+                    fc = nn.Linear(in_features, out_features, bias=True)
+                    nn.init.kaiming_normal_(fc.weight, nonlinearity='relu')
+                    encoderLayers.append(fc)
 
                     # Add the ReLU activation function
                     encoderLayers.append(self.relu)
@@ -104,11 +107,25 @@ class VAE_expanding(nn.Module):
                 else:
                     out_features = encoder_config[iLayer]
 
-                    self.hidden_to_mu = nn.Linear(in_features, out_features, with_bias=True)
-                    self.hidden_to_logvar = nn.Linear(in_features, out_features, with_bias=True)
+                    '''
+                    For the 2 last layers (latent space), it is useful to assign the transformation to the class attributes
+                    for future extraction
+                    '''
+                    self.hidden_to_mu = nn.Linear(in_features, out_features, bias=True)
+                    self.hidden_to_logvar = nn.Linear(in_features, out_features, bias=True)
 
-                    encoderLayers.append(nn.init.kaiming_normal_(self.hidden_to_mu.weight, nonlinearity='relu'))
-                    encoderLayers.append(nn.init.kaiming_normal_(self.hidden_to_logvar.weight, nonlinearity='relu'))
+                    # Initialize the weights with He initialization
+                    nn.init.kaiming_normal_(self.hidden_to_mu.weight, nonlinearity='relu')
+                    nn.init.kaiming_normal_(self.hidden_to_logvar.weight, nonlinearity='relu')
+                    
+                    '''
+                    # Adding the last 2 layers to the encoder
+                    encoderLayers.append(self.hidden_to_mu)
+                    encoderLayers.append(self.hidden_to_logvar)
+
+                    encoderLayers.append(self.relu)'''
+
+                    in_features = out_features
                 
             self.encoder = nn.Sequential(*encoderLayers).to(device=self.device)
 
@@ -119,8 +136,9 @@ class VAE_expanding(nn.Module):
                 out_features = decoder_config[iLayer]
 
                 # Add a linear fully connected layer and initialize the weights with He initialization
-                fc = nn.Linear(in_features, out_features, with_bias=True)
-                decoderLayers.append(nn.init.kaiming_normal_(fc.weight, nonlinearity='relu'))
+                fc = nn.Linear(in_features, out_features, bias=True)
+                #decoderLayers.append(nn.init.kaiming_normal_(fc.weight, nonlinearity='relu'))
+                decoderLayers.append(fc)
 
                 # Add the ReLU activation function
                 decoderLayers.append(self.relu)
@@ -136,23 +154,37 @@ class VAE_expanding(nn.Module):
         return mu + sigma*epsilon
 
     def forward(self, x):
+        # Flatten the input image
         x = x.view(x.size(0), -1)
+        x = x.to(self.device)
+        print("start encode")
+        # Pass the images into the encoder part (not include the latent layer)
         encoder_output = self.encoder(x)
-        mu = self.hidden_to_mu(encoder_output)
-        log_var = self.hidden_to_logvar(encoder_output)
+        encoder_output = encoder_output.to(self.device)
+        print("done 1st encode")
+
+        # Extract the mean and logvar of the latent code
+        self.hidden_to_mu = self.hidden_to_mu.to(self.device)
+        self.hidden_to_logvar = self.hidden_to_logvar.to(self.device)
+        mu = self.relu(self.hidden_to_mu(encoder_output))
+        log_var = self.relu(self.hidden_to_logvar(encoder_output))
+        print("done 2nd encode")
+
+        # Reparametrization trick
         z = self.reparametrization(mu, log_var)
+        
+        # Pass the latent code into the decoder part
         x_recon = self.decoder(z)
         x_recon = x_recon.view(x.size(0), *self.input_size)
+        
         return x_recon, mu, log_var
 
-            
-
-
-
-
-
 if __name__ == "__main__":
-    model = VAE(784, 256, 32)
+
+    encoder_config = [256, 128, 32]
+    decoder_config = [128, 256, 784]
+    model = VAE_expanding((28, 28), "cpu")
+    model.construct(encoder_config, decoder_config, False)
 
     x = torch.randn(64, 784)
     x_recon, mu, log_var = model(x)

@@ -141,8 +141,11 @@ class VAE_expanding(nn.Module):
                 nn.init.kaiming_normal_(fc.weight, nonlinearity='relu')
                 decoderLayers.append(fc)
 
-                # Add the ReLU activation function
-                decoderLayers.append(self.relu)
+                # Add the activation function: ReLU for hidden layers and Sigmoid for the output layer
+                if iLayer == len(decoder_config) - 1:
+                    decoderLayers.append(self.sigmoid)
+                else:
+                    decoderLayers.append(self.relu)
                 in_features = out_features
 
             self.decoder = nn.Sequential(*decoderLayers).to(device=self.device)

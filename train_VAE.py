@@ -45,11 +45,14 @@ for (x, y) in train_loader:
     print('Mean Pixel Value {} \nPixel Values Std: {}'.format(x.float().mean(), x.float().std()))
     break
 
-BCE_loss = nn.BCELoss()
+BCE_loss = nn.BCELoss(reduction = 'sum')
 
-def loss_function(x, x_hat, mean, log_var):
-    reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, reduction='sum')
+def loss_function(x, x_recon, mean, log_var):
+
+    reproduction_loss = BCE_loss(x_recon, x)
+    print(reproduction_loss)
     KLD      = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
+    print(KLD)
 
     return reproduction_loss + KLD
 
@@ -61,10 +64,9 @@ for epoch in range(NUM_EPOCHS):
     for batch_idx, (x, _) in loop:
         # flatten the imput image
         x = x.view(-1, 28*28)
-        print(x.shape)
         x = x.to(DEVICE)
+        
         x_recon, mu, log_var = model(x)
-        print(x_recon.shape)
 
         # compute loss functions    
         total_loss = loss_function(x, x_recon, mu, log_var)

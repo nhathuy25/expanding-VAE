@@ -69,6 +69,7 @@ class VAE_expanding(nn.Module):
         self.decoder = nn.Sequential()
 
         #Define activation function:
+        self.leaky_relu = nn.LeakyReLU(0.2)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
@@ -194,6 +195,7 @@ class VAE_expanding(nn.Module):
         old_out_features = layer.out_features
         new_out_features = old_out_features + nb_neuron_increase
 
+        # Create a new layer with the new number of neurons
         new_layer = nn.Linear(layer.in_features, new_out_features, bias=(old_bias is not None)).to(self.device)
         
         # Copy the old weights and biases to the new layer

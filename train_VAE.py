@@ -50,6 +50,11 @@ for (x, y) in train_loader:
     print('Mean Pixel Value {} \nPixel Values Std: {}'.format(x.float().mean(), x.float().std()))
     break
 
+
+''' Define Loss functions for VAE 
+    - Reconstruction difference, we use the Binary Cross Entropy (BCE) loss
+    - Kull
+'''
 # BCE Loss
 BCE_loss = nn.BCELoss(reduction = 'sum')
 

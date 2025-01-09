@@ -14,18 +14,30 @@ import time
 import json
 import copy
 from typing import Dict, List
+import numpy as np
 
-''' Configurations'''
+''' MODEL '''
+
+# Configurations
 INPUT_DIM = 784
 HIDDEN_DIM_1 = 256
 HIDDEN_DIM_2 = 128
-LATENT_DIM = 32
-GROW_EPOCH = 11
+LATENT_DIM = 20
+GROW_EPOCH = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 15
+NUM_EPOCHS = 50
 LEARNING_RATE = 1e-3
-BATCH_SIZE = 32
+BATCH_SIZE = 128
+
+# Expanding configurations
+NB_NODE_ADD_1 = 50
+NB_NODE_ADD_2 = 25
+
+# Set the name for the model for saving
+model_name = f'VAE_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}'
+
+# ------------------------
 
 ''' Load the MNIST dataset '''
 data_transform = transforms.Compose([transforms.ToTensor()])
@@ -51,37 +63,72 @@ def loss_function(x, x_recon, mean, log_var):
 '''
 def train(model, tqdm_loop, loss_function, optimizer):
     train_loss = 0
+    sum_elbo = 0
     for batch_idx, (x, _) in tqdm_loop:
         # flatten the imput image
         x = x.view(-1, 28*28)
         x = x.to(DEVICE)
-        
+        # pass the input to the model
         x_recon, mu, log_var = model(x)
 
-        # compute loss functions    
+        # calculate the loss
         total_loss = loss_function(x, x_recon, mu, log_var)
 
-        # backprop
+        # sum the losses over the batches
         train_loss += total_loss.item()
+
+        # calculate elbo for each batch
+        elbo = measure_ELBO(x, model, 1)
+        sum_elbo += elbo
 
         #print(f"Total loss before .item(): {total_loss}")
 
-        optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
+        optimizer.zero_grad()   # clear the gradients
+        total_loss.backward()   # back-propagation
+        optimizer.step()        # update the weights
 
+        # update the progress bar
         tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
     
-    return train_loss/(batch_idx*BATCH_SIZE+1)
+    # Return: - the average loss over number of data points
+    #         - the average elbo over number of batches
+    return train_loss/(len(tqdm_loop)*BATCH_SIZE), elbo/(BATCH_SIZE)
 
-''' 
-Evaluation metric
-Inputs: - model: the model to be evaluated
-        - testLoader: the data loader of test dataset
-        - 
 '''
-def measure_variance():
-    pass
+Measuring Evidence Lower Bound (ELBO) for each datapoint x_i with L samples from the latent space
+Inputs: - x: the datapoint
+        - model: the model to be evaluated
+        - L: the number of samples to be drawn from the latent space
+
+Outputs: - scalar value (unbiased stochastic estimate lower bound on logp_theta(x))
+
+'''
+def measure_ELBO(x, model, L):
+    '''# assert the input shaped to vector tensor
+    assert x.shape == (-1, 28*28)
+    x = x.to(DEVICE)'''
+
+    # pass the input to the model, collect mean and logvar of latent code
+    _, mu, logvar = model(x)
+
+    # Initialize the log-probabilities
+    logp_theta = 0  # logp_theta(x,z)
+    logq_phi = 0    # logq_phi(z|x)
+
+    for l in range(L):
+        # sample z from the latent space with the reparametrization trick
+        z = model.reparametrization(mu, logvar)
+
+        # calculate the logp_theta(x,z) = logp(x|z) + logp(z)
+        logp_theta -= BCE_loss(model.decoder(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
+        logp_theta += torch.sum(-0.5 * torch.pow(z, 2) - 0.5 * torch.log(torch.tensor(2 * np.pi))) # adding term logp(z) = log(N(0,1))
+
+        # calculate the logq_phi(z|x)
+        logq_phi += torch.sum( -0.5 * (torch.pow(z - mu, 2)/ torch.exp(logvar) + logvar + torch.log(torch.tensor(2*np.pi))))
+    
+    # calculate the ELBO
+    ELBO = 1/L * (logp_theta - logq_phi)
+    return ELBO.cpu().detach().numpy()
 
 ''' 
 Adding nodes to the expands layers function
@@ -106,9 +153,6 @@ decoder_config = [HIDDEN_DIM_2, HIDDEN_DIM_1, INPUT_DIM]
 # Define the date
 date = time.strftime("%Y%m%d")
 
-# Set the name for the model for saving
-model_name = f'VAE_2hid_{NUM_EPOCHS}eps_{date}'
-
 model = VAE_expanding((28, 28), device=DEVICE)
 model.construct(encoder_config, decoder_config, False)
 
@@ -117,18 +161,15 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 ''' 
 TRAINING PART 
 '''
-# Configurations
-GROW_EPOCH = 5
-NB_NODE_ADD_1 = 32
-NB_NODE_ADD_2 = 16
 
+# ------------------------
 # Mark start time
 start_time = time.time()
 
 train_info = {
     'growth_epoch': [],
     'loss_list': [],
-    'accuracy': []
+    'elbos': []
 }
 
 train_loss_list = []
@@ -136,20 +177,22 @@ train_loss = 0
 
 model.train()
 for epoch in range(NUM_EPOCHS):
-
+    # Expanding the model
     if (epoch+1) % GROW_EPOCH == 0 and epoch != 0:
         # Adding growth epoch info
         train_info['growth_epoch'].append(epoch)
         model_growth = copy.deepcopy(model) # Explain
         # Adding nodes to the first layer of encoder
-        func_expand_layer(model_growth, 0, NB_NODE_ADD_1, epoch, True)
+        func_expand_layer(model_growth, 0, NB_NODE_ADD_1, epoch+1, True)
         # Adding nodse to the second layer of encoder
-        func_expand_layer(model_growth, 2, NB_NODE_ADD_2, epoch, True)
+        func_expand_layer(model_growth, 2, NB_NODE_ADD_2, epoch+1, True)
         growth_optimizer = torch.optim.Adam(model_growth.parameters(), lr=LEARNING_RATE)
 
+    # Training
     loop = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS}', leave=False)
-    train_loss = train(model, loop, loss_function, optimizer)
-    train_info['loss_list'].append(train_loss/len(train_loader))
+    train_loss, elbos = train(model, loop, loss_function, optimizer)
+    train_info['loss_list'].append(train_loss)
+    train_info['elbos'].append(elbos)
 
 ''' End of training & saving the model '''
 
@@ -159,9 +202,10 @@ elapsed_time = end_time - start_time
 
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
+
 # Save the training loss list to a file
-with open(f'saved_loss/train_loss_{model_name}.json', 'w') as f:
-    json.dump(train_info['loss_list'], f)
+with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
+    json.dump(train_info, f)
 
 # save the model
 torch.save(model.state_dict(), f'saved_model/{model_name}.pth')

@@ -1,5 +1,8 @@
 """
-This script is used to train the VAE model on the MNIST dataset. Used on the last internship at LIFAT.
+This script simply train the VAE model with model.py/VAE_expanding module on the MNIST dataset.
+No expansion is done in this script, only to test the initialisation of model base on list 
+of hidden layers and train the model.
+
 Huy
 """
 
@@ -53,7 +56,7 @@ for (x, y) in train_loader:
 
 ''' Define Loss functions for VAE 
     - Reconstruction difference, we use the Binary Cross Entropy (BCE) loss
-    - Kull
+    - Kull-back Leibler Divergence (KLD)
 '''
 # BCE Loss
 BCE_loss = nn.BCELoss(reduction = 'sum')
@@ -81,20 +84,19 @@ for epoch in range(NUM_EPOCHS):
         x_recon, mu, log_var = model(x)
 
         # compute loss functions    
-        #total_loss = loss_function(x, x_recon, mu, log_var)
+        # total_loss = loss_function(x, x_recon, mu, log_var)
         
         reproduction_loss = BCE_loss(x_recon, x)
         KL_div = - 0.5 * torch.sum(1+ log_var - mu.pow(2) - log_var.exp())
+        # sum of 2 losses: reproduction loss and KL divergence
         total_loss = reproduction_loss + KL_div
 
-        # backprop
+        # sum the losses over the batches
         train_loss += total_loss.item()
 
-        #print(f"Total loss before .item(): {total_loss}")
-
-        optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
+        optimizer.zero_grad()   # clear the gradients
+        total_loss.backward()   # backprobagation
+        optimizer.step()        # update the weights
 
         loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
     

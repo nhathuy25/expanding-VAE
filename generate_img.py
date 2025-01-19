@@ -27,15 +27,15 @@ model.eval()
 
 def get_samples_for_digits(dataset, num_digits=10):
     """
-    Lấy mỗi chữ số từ 0 đến 9 trong tập MNIST.
+    Get one image for each digit from 0 to 9 in the MNIST dataset.
     
     Args:
-        dataset: Tập dữ liệu MNIST.
-        num_digits: Số lượng chữ số cần lấy (mặc định 10: từ 0 đến 9).
+        dataset: MNIST dataset.
+        num_digits: Number of digits to retrieve (default is 10: from 0 to 9).
     
     Returns:
-        images: Danh sách hình ảnh tương ứng với từng chữ số.
-        labels: Danh sách nhãn của từng chữ số.
+        images: List of images corresponding to each digit.
+        labels: List of labels for each digit.
     """
     images = []
     labels = []
@@ -43,14 +43,14 @@ def get_samples_for_digits(dataset, num_digits=10):
     
     for img, label in dataset:
         if label.item() not in digit_set:
-            images.append(img.view(28, 28).numpy())  # Lưu ảnh
-            labels.append(label.item())  # Lưu nhãn
-            digit_set.add(label.item())  # Thêm chữ số vào tập đã thấy
+            images.append(img.view(28, 28).numpy())  # Save the image
+            labels.append(label.item())  # Save the label
+            digit_set.add(label.item())  # Add digit to the set of seen digits
             
-        if len(digit_set) == num_digits:  # Khi đủ 10 chữ số thì dừng
+        if len(digit_set) == num_digits:  # Stop when all 10 digits are collected
             break
     
-    # Sắp xếp hình ảnh theo thứ tự tăng dần của nhãn
+    # Sort the images by their labels
     sorted_images_and_labels = sorted(zip(labels, images), key=lambda x: x[0])
     sorted_labels, sorted_images = zip(*sorted_images_and_labels)
     
@@ -58,110 +58,110 @@ def get_samples_for_digits(dataset, num_digits=10):
 
 def get_latent_vector_from_image(model, image, device=torch.device("cpu")):
     """
-    Tính toán vector z từ một hình ảnh đầu vào sử dụng mô hình VAE.
+    Compute the latent vector z from an input image using the VAE model.
 
     Args:
-        model: Mô hình VAE đã được huấn luyện.
-        image: Ảnh đầu vào, dạng torch.Tensor với shape (1, 28, 28) hoặc (28, 28).
-        device: Thiết bị thực thi (CPU hoặc GPU).
+        model: The trained VAE model.
+        image: The input image, as a torch.Tensor with shape (1, 28, 28) or (28, 28).
+        device: The device to run on (CPU or GPU).
 
     Returns:
-        z: Vector latent z với noise epsilon.
+        z: The latent vector z with noise epsilon.
     """
-    model.eval()  # Đặt mô hình ở chế độ đánh giá
+    model.eval()  # Set the model to evaluation mode
     with torch.no_grad():
-        # Đưa ảnh về đúng định dạng
-        if len(image.shape) == 2:  # Nếu ảnh là (28, 28)
-            image = image.unsqueeze(0)  # Thêm batch dimension
-        if len(image.shape) == 3:  # Nếu ảnh là (1, 28, 28)
-            image = image.unsqueeze(0)  # Thêm batch dimension cho batch=1
+        # Reshape the image if necessary
+        if len(image.shape) == 2:  # If the image is (28, 28)
+            image = image.unsqueeze(0)  # Add batch dimension
+        if len(image.shape) == 3:  # If the image is (1, 28, 28)
+            image = image.unsqueeze(0)  # Add batch dimension for batch=1
 
-        image = image.to(device)  # Chuyển ảnh sang thiết bị
-        image = image.view(image.size(0), -1)  # Flatten ảnh thành (batch_size, INPUT_DIM)
+        image = image.to(device)  # Move image to device
+        image = image.view(image.size(0), -1)  # Flatten the image into (batch_size, INPUT_DIM)
 
-        # Tính toán mu và log_sigma thông qua encoder
+        # Compute mu and log_sigma through the encoder
         mu, log_sigma = model.encoder(image)
-        sigma = torch.exp(0.5 * log_sigma)  # Chuyển từ log_sigma thành sigma
+        sigma = torch.exp(0.5 * log_sigma)  # Convert from log_sigma to sigma
 
-        # Tạo epsilon từ phân phối chuẩn
+        # Create epsilon from a normal distribution
         epsilon = torch.randn_like(sigma).to(device)
 
-        # Tái tham số hóa để tính z
+        # Reparameterization to compute z
         z = mu + epsilon * sigma
 
     return z
 
 def generate_image_from_latent(model, latent_dim, device=torch.device("cpu")):
     """
-    Sinh một hình ảnh mới từ latent vector ngẫu nhiên sử dụng decoder của VAE.
+    Generate a new image from a random latent vector using the VAE decoder.
 
     Args:
-        model: Mô hình VAE đã được huấn luyện.
-        latent_dim: Kích thước không gian latent (LATENT_DIM).
-        device: Thiết bị thực thi (CPU hoặc GPU).
+        model: The trained VAE model.
+        latent_dim: The latent space dimensionality (LATENT_DIM).
+        device: The device to run on (CPU or GPU).
 
     Returns:
-        generated_image: Hình ảnh được tạo ra (dạng numpy array, shape (28, 28)).
+        generated_image: The generated image (numpy array, shape (28, 28)).
     """
-    model.eval()  # Đặt mô hình ở chế độ đánh giá
+    model.eval()  # Set the model to evaluation mode
     with torch.no_grad():
-        # Tạo vector z ngẫu nhiên từ phân phối chuẩn
-        z = torch.randn(1, latent_dim).to(device)  # Kích thước (1, LATENT_DIM)
+        # Create a random latent vector z from a normal distribution
+        z = torch.randn(1, latent_dim).to(device)  # Shape (1, LATENT_DIM)
         
-        # Dùng decoder để sinh ảnh mới
-        generated_image = model.decoder(z)  # Tái tạo từ z
-        generated_image = generated_image.view(28, 28).cpu().numpy()  # Reshape và chuyển sang numpy
+        # Use the decoder to generate a new image
+        generated_image = model.decoder(z)  # Reconstruct from z
+        generated_image = generated_image.view(28, 28).cpu().numpy()  # Reshape and convert to numpy
 
     return generated_image
 
 def generate_multiple_images(model, latent_dim, num_samples, device=torch.device("cpu")):
     """
-    Sinh nhiều hình ảnh mới từ các latent vector ngẫu nhiên.
+    Generate multiple new images from random latent vectors.
 
     Args:
-        model: Mô hình VAE đã được huấn luyện.
-        latent_dim: Kích thước không gian latent (LATENT_DIM).
-        num_samples: Số lượng ảnh cần tạo.
-        device: Thiết bị thực thi (CPU hoặc GPU).
+        model: The trained VAE model.
+        latent_dim: The latent space dimensionality (LATENT_DIM).
+        num_samples: The number of images to generate.
+        device: The device to run on (CPU or GPU).
 
     Returns:
-        images: Danh sách các ảnh được tạo (numpy arrays, mỗi ảnh có shape (28, 28)).
+        images: A list of generated images (numpy arrays, each with shape (28, 28)).
     """
     model.eval()
     images = []
     with torch.no_grad():
-        # Tạo num_samples vector z ngẫu nhiên
-        z = torch.randn(num_samples, latent_dim).to(device)  # Kích thước (num_samples, LATENT_DIM)
+        # Create num_samples random latent vectors z
+        z = torch.randn(num_samples, latent_dim).to(device)  # Shape (num_samples, LATENT_DIM)
         
-        # Dùng decoder để sinh ảnh
-        generated_data = model.decoder(z)  # Tái tạo từ z
-        generated_data = generated_data.view(-1, 28, 28).cpu().numpy()  # Reshape và chuyển sang numpy
+        # Use the decoder to generate images
+        generated_data = model.decoder(z)  # Reconstruct from z
+        generated_data = generated_data.view(-1, 28, 28).cpu().numpy()  # Reshape and convert to numpy
         
         images = [img for img in generated_data]
 
     return images
 
-# Lấy mẫu từ tập MNIST
-mnist_loader = DataLoader(dataset, batch_size=1, shuffle=False)  # Không xáo trộn
+# Retrieve samples from the MNIST dataset
+mnist_loader = DataLoader(dataset, batch_size=1, shuffle=False)  # No shuffling
 images, labels = get_samples_for_digits(mnist_loader)
 
-# Sinh 10 ảnh mới
+# Generate 10 new images
 generated_images = generate_multiple_images(model, LATENT_DIM, num_samples=10, device=DEVICE)
 
-# Hiển thị cả ảnh gốc (MNIST) và ảnh được sinh
-fig, axes = plt.subplots(2, 10, figsize=(15, 6))  # 2 hàng, 10 cột
+# Display both original (MNIST) and generated images
+fig, axes = plt.subplots(2, 10, figsize=(15, 6))  # 2 rows, 10 columns
 
-# Hiển thị các ảnh gốc từ MNIST
+# Display the original MNIST images
 for i in range(10):
-    axes[0, i].imshow(images[i], cmap='gray')  # Ảnh gốc MNIST
-    axes[0, i].set_title(f"Digit: {labels[i]}")  # Nhãn của ảnh
+    axes[0, i].imshow(images[i], cmap='gray')  # Original MNIST image
+    axes[0, i].set_title(f"Digit: {labels[i]}")  # Label of the image
     axes[0, i].axis('off')
 
-# Hiển thị các ảnh được sinh từ latent space
+# Display the generated images
 for i in range(10):
-    axes[1, i].imshow(generated_images[i], cmap='gray')  # Ảnh được sinh
-    axes[1, i].set_title(f"Generated {i+1}")  # Tiêu đề (Generated)
+    axes[1, i].imshow(generated_images[i], cmap='gray')  # Generated image
+    axes[1, i].set_title(f"Generated {i+1}")  # Title (Generated)
     axes[1, i].axis('off')
 
-plt.tight_layout()  # Điều chỉnh layout
+plt.tight_layout()  # Adjust layout
 plt.show()

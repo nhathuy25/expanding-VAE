@@ -222,7 +222,7 @@ class VAE_expanding(nn.Module):
             print('Layer ', layer_index, ': ', self.encoder[layer_index], 'Layer ', layer_index + 2, ': ', self.encoder[layer_index + 2])
         
         # Adjust the latent layer's in_features and weight matrix if it exists
-        elif layer_index + 2 > len(self.encoder):
+        elif layer_index + 2 >= len(self.encoder):
             new_hidden_to_mu = nn.Linear(new_out_features, self.hidden_to_mu.out_features, bias=True).to(self.device)
             new_hidden_to_logvar = nn.Linear(new_out_features, self.hidden_to_logvar.out_features, bias=True).to(self.device)
             with torch.no_grad():

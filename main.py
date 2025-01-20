@@ -26,7 +26,7 @@ LATENT_DIM = 20
 GROW_EPOCH = 3
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 10
+NUM_EPOCHS = 6
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
@@ -211,7 +211,7 @@ for epoch in range(NUM_EPOCHS):
     if (epoch+1) % GROW_EPOCH == 0 and epoch != 0:
         # Adding growth epoch info
         train_info['growth_epoch'].append(epoch)
-        model_growth = copy.deepcopy(model) # Explain
+        model_growth = copy.deepcopy(model) if epoch+1 == GROW_EPOCH else copy.deepcopy(model_growth)
         # Adding nodes to the first layer of encoder
         func_expand_layer(model_growth, 0, NB_NODE_ADD_1, epoch+1)
         # Adding nodse to the second layer of encoder
@@ -219,28 +219,30 @@ for epoch in range(NUM_EPOCHS):
         growth_optimizer = torch.optim.Adam(model_growth.parameters(), lr=LEARNING_RATE)
 
     # Training
-    loop = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS}', leave=False)
+    loop = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model)', leave=False)
     train_loss, elbos = train(model, epoch, loop, loss_function, optimizer)
     train_loss_list.append(train_loss)
     train_elbos.append(elbos)
 
     if 'model_growth' in locals():
-        # For the first epoch of growth model, copy the lists of loss and elbo from the original model
-        if epoch == 0:
-            train_loss_growth_list = train_loss_list
-            train_elbos_growth = train_elbos
-
         # Train the growth model parallelly
-        loop_growth = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS}', leave=False)
+        loop_growth = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model_growth)', leave=False)
         train_loss_growth, elbos_growth = train(model_growth, epoch, loop_growth, loss_function, growth_optimizer)
         train_loss_growth_list.append(train_loss_growth)
         train_elbos_growth.append(elbos_growth)
 
-    # Save the losses and elbos to the dictionary
-    train_info['loss_list'] = train_loss_list
-    train_info['loss_growth_list'] = train_loss_growth_list
-    train_info['elbos'] = train_elbos
-    train_info['elbos_growth'] = train_elbos_growth
+# Copy the initial losses (before first growing epoch) to the growth model's loss list and elbos list
+initial_losses = train_loss_list[:GROW_EPOCH-1]
+train_loss_growth_list = initial_losses + train_loss_growth_list
+
+initial_elbos = train_elbos[:GROW_EPOCH-1]
+train_elbos_growth = initial_elbos + train_elbos_growth    
+
+# Save the losses and elbos to the dictionary
+train_info['loss_list'] = train_loss_list
+train_info['loss_growth_list'] = train_loss_growth_list
+train_info['elbos'] = train_elbos
+train_info['elbos_growth'] = train_elbos_growth
 
 ''' End of training & saving the model '''
 print(f"Final model: ", model)
@@ -248,6 +250,8 @@ print(f"Final model growth: ", model_growth)
 print(f'Losses list size: {len(train_info["loss_list"])}')
 print(f'Losses growth list size: {len(train_info["loss_growth_list"])}')
 
+print(f"Model's losses: ", train_loss_list)
+print(f"Model growth's losses: ", train_loss_growth_list)
 
 # Mark end time
 end_time = time.time()
@@ -256,21 +260,22 @@ elapsed_time = end_time - start_time
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
 
-'''# Save the training loss list to a file
+# Save the training loss list to a file
 with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
     json.dump(train_info, f)
 
 # save the model
-torch.save(model.state_dict(), f'saved_model/{model_name}.pth')'''
+torch.save(model.state_dict(), f'saved_model/{model_name}.pth')
 
 #------------------------ Plot
 import matplotlib.pyplot as plt
 # Plot the training loss
-'''fig, ax1 = plt.subplots(figsize=(8, 5))
+fig, ax1 = plt.subplots(figsize=(8, 5))
 epochs = range(1, len(train_info['loss_list']) + 1)
 
 # Plot LOSS on the first y-axis
 ax1.plot(epochs, train_info['loss_list'], label='Training Loss', color='b')
+ax1.plot(epochs, train_info['loss_growth_list'], label='Training Loss Growth', color='g')
 ax1.set_xlabel('Epochs')
 ax1.set_ylabel('Loss')
 ax1.tick_params(axis='y')
@@ -286,6 +291,7 @@ ax1.set_xticks(np.arange(0, len(epochs) + 1, 5))
 # Create a second y-axis for ELBO
 ax2 = ax1.twinx()
 ax2.plot(epochs, train_info['elbos'], label='ELBO', color='r')
+ax2.plot(epochs, train_info['elbos_growth'], label='ELBO Growth', color='y')
 ax2.set_ylabel('ELBO')
 ax2.tick_params(axis='y')
 
@@ -293,4 +299,5 @@ ax2.tick_params(axis='y')
 plt.title('Training Loss and ELBO by Epoch')
 plt.legend()
 fig.tight_layout()  # Adjust layout to make room for both y-axes
-plt.savefig(f'{model_name}.png')'''
+plt.savefig(f'{model_name}.png')
+plt.show()

@@ -69,7 +69,6 @@ class VAE_expanding(nn.Module):
         self.decoder = nn.Sequential()
 
         #Define activation function:
-        self.leaky_relu = nn.LeakyReLU(0.2)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
@@ -185,11 +184,8 @@ class VAE_expanding(nn.Module):
     '''
     Function expand_layer to add more neurons to a defined layer
     '''
-    def expand_layer(self, layer_index, nb_neuron_increase, bool_encoder = True):
-        if bool_encoder:
-            layer = self.encoder[layer_index]
-        else:
-            layer = self.decoder[layer_index]
+    def expand_layer(self, layer_index, nb_neuron_increase):
+        layer = self.encoder[layer_index]
         old_weight = layer.weight
         old_bias = layer.bias.data if layer.bias is not None else None
         old_out_features = layer.out_features
@@ -210,10 +206,37 @@ class VAE_expanding(nn.Module):
                 new_layer.bias[:old_out_features] = old_bias
 
         # Replace the current layer with the new created layer
-        if bool_encoder:
-            self.encoder[layer_index] = new_layer.to(self.device)
-        else:
-            self.decoder[layer_index] = new_layer.to(self.device)
+        self.encoder[layer_index] = new_layer.to(self.device)
+
+        # Adjust the subsequent layer's in_features and weight matrix if it exists
+        if layer_index + 2 < len(self.encoder) and isinstance(self.encoder[layer_index + 2], nn.Linear):
+            old_next_layer = self.encoder[layer_index + 2]
+            new_next_layer = nn.Linear(new_out_features, old_next_layer.out_features, bias=(old_next_layer.bias is not None)).to(self.device)
+            with torch.no_grad():
+                new_next_layer.weight[:, :old_out_features] = old_next_layer.weight.data[:, :old_out_features]
+                if old_out_features < new_out_features:
+                    nn.init.zeros_(new_next_layer.weight[:, old_out_features:])
+
+            self.encoder[layer_index + 2] = new_next_layer.to(self.device)
+            
+            print('Layer ', layer_index, ': ', self.encoder[layer_index], 'Layer ', layer_index + 2, ': ', self.encoder[layer_index + 2])
+        
+        # Adjust the latent layer's in_features and weight matrix if it exists
+        elif layer_index + 2 > len(self.encoder):
+            new_hidden_to_mu = nn.Linear(new_out_features, self.hidden_to_mu.out_features, bias=True).to(self.device)
+            new_hidden_to_logvar = nn.Linear(new_out_features, self.hidden_to_logvar.out_features, bias=True).to(self.device)
+            with torch.no_grad():
+                new_hidden_to_mu.weight[:, :old_out_features] = self.hidden_to_mu.weight.data[:, :old_out_features]
+                new_hidden_to_logvar.weight[:, :old_out_features] = self.hidden_to_logvar.weight.data[:, :old_out_features]
+                if old_out_features < new_out_features:
+                    nn.init.zeros_(new_hidden_to_mu.weight[:, old_out_features:])
+                    nn.init.zeros_(new_hidden_to_logvar.weight[:, old_out_features:])
+                
+            self.hidden_to_mu = new_hidden_to_mu.to(self.device)
+            self.hidden_to_logvar = new_hidden_to_logvar.to(self.device)
+
+            print('Layer ', layer_index, ': ', self.encoder[layer_index], 'Layer mu&logvar: ', self.hidden_to_mu)
+
 
 if __name__ == "__main__":
 
@@ -223,7 +246,7 @@ if __name__ == "__main__":
     model.construct(encoder_config, decoder_config, False)
 
     # Expand the first hidden layer in the encoder by 64 neurons
-    model.expand_layer(0, 64, bool_encoder=True)
+    model.expand_layer(0, 64)
 
     # Print the structure of the encoder and decoder
     print("Encoder structure:")

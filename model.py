@@ -222,6 +222,16 @@ if __name__ == "__main__":
     model = VAE_expanding((28, 28), "cpu")
     model.construct(encoder_config, decoder_config, False)
 
+    # Expand the first hidden layer in the encoder by 64 neurons
+    model.expand_layer(0, 64, bool_encoder=True)
+
+    # Print the structure of the encoder and decoder
+    print("Encoder structure:")
+    print(model.encoder)
+
+    print("\nDecoder structure:")
+    print(model.decoder)
+
     x = torch.randn(64, 784)
     x_recon, mu, log_var = model(x)
 

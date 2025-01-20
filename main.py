@@ -23,19 +23,20 @@ INPUT_DIM = 784
 HIDDEN_DIM_1 = 256
 HIDDEN_DIM_2 = 128
 LATENT_DIM = 20
-GROW_EPOCH = 10
+GROW_EPOCH = 5
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 50
+NUM_EPOCHS = 20
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
+L_SAMPLE = 3
 NB_NODE_ADD_1 = 50
 NB_NODE_ADD_2 = 25
 
 # Set the name for the model for saving
-model_name = f'VAE_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}'
+model_name = f'VAE_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
 
 # ------------------------
 
@@ -46,8 +47,8 @@ dataset = datasets.MNIST(root='dataset/', train=True, transform=data_transform, 
 train_loader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 ''' Define Loss functions for VAE 
-    - Reconstruction difference, we use the Binary Cross Entropy (BCE) loss
-    - Kull
+    - Reconstruction difference, we use the Binary Cross Entropy Loss function BCE(x, decoder(z))
+    - Kullback - Leibler divergence KL(q(z|x) || p(z)) between the posterior q(z|x) and the prior p(z)
 '''
 # BCE Loss
 BCE_loss = nn.BCELoss(reduction = 'sum')
@@ -61,35 +62,60 @@ def loss_function(x, x_recon, mean, log_var):
 
 ''' Trainning per epoch function
 '''
-def train(model, tqdm_loop, loss_function, optimizer):
+def train(model, epoch, tqdm_loop, loss_function, optimizer):
     train_loss = 0
     sum_elbo = 0
-    for batch_idx, (x, _) in tqdm_loop:
-        # flatten the imput image
-        x = x.view(-1, 28*28)
-        x = x.to(DEVICE)
-        # pass the input to the model
-        x_recon, mu, log_var = model(x)
+    # First epoch training
+    if epoch == 0:
+        model.train()
+        for batch_idx, (x, _) in tqdm_loop:
+            # flatten the imput image
+            x = x.view(-1, 28*28)
+            x = x.to(DEVICE)
+            # pass the input to the model
+            x_recon, mu, log_var = model(x)
 
-        # calculate the loss
-        total_loss = loss_function(x, x_recon, mu, log_var)
+            # calculate the loss
+            total_loss = loss_function(x, x_recon, mu, log_var)
 
-        # sum the losses over the batches
-        train_loss += total_loss.item()
+            # sum the losses over the batches
+            train_loss += total_loss.item()
 
-        # calculate elbo for each batch
-        elbo = measure_ELBO(x, model, 1)
-        sum_elbo += elbo
+            # calculate elbo for each batch
+            elbo = measure_ELBO(x, model, L_SAMPLE)
+            sum_elbo += elbo
 
-        #print(f"Total loss before .item(): {total_loss}")
+            optimizer.zero_grad() # clear the gradients
 
-        optimizer.zero_grad()   # clear the gradients
-        total_loss.backward()   # back-propagation
-        optimizer.step()        # update the weights
+            # update the progress bar
+            tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
+    else:
+        for batch_idx, (x, _) in tqdm_loop:
+            # flatten the imput image
+            x = x.view(-1, 28*28)
+            x = x.to(DEVICE)
+            # pass the input to the model
+            x_recon, mu, log_var = model(x)
 
-        # update the progress bar
-        tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
-    
+            # calculate the loss
+            total_loss = loss_function(x, x_recon, mu, log_var)
+
+            # sum the losses over the batches
+            train_loss += total_loss.item()
+
+            # calculate elbo for each batch
+            elbo = measure_ELBO(x, model, L_SAMPLE)
+            sum_elbo += elbo
+
+            #print(f"Total loss before .item(): {total_loss}")
+
+            optimizer.zero_grad()   # clear the gradients
+            total_loss.backward()   # back-propagation
+            optimizer.step()        # update the weights
+
+            # update the progress bar
+            tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
+
     # Return: - the average loss over number of data points
     #         - the average elbo over number of batches
     return train_loss/(len(tqdm_loop)*BATCH_SIZE), elbo/(BATCH_SIZE)
@@ -187,10 +213,11 @@ for epoch in range(NUM_EPOCHS):
         # Adding nodse to the second layer of encoder
         func_expand_layer(model_growth, 2, NB_NODE_ADD_2, epoch+1, True)
         growth_optimizer = torch.optim.Adam(model_growth.parameters(), lr=LEARNING_RATE)
+        print(model_growth)
 
     # Training
     loop = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS}', leave=False)
-    train_loss, elbos = train(model, loop, loss_function, optimizer)
+    train_loss, elbos = train(model, epoch, loop, loss_function, optimizer)
     train_info['loss_list'].append(train_loss)
     train_info['elbos'].append(elbos)
 
@@ -203,9 +230,9 @@ elapsed_time = end_time - start_time
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
 
-# Save the training loss list to a file
+'''# Save the training loss list to a file
 with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
     json.dump(train_info, f)
 
 # save the model
-torch.save(model.state_dict(), f'saved_model/{model_name}.pth')
+torch.save(model.state_dict(), f'saved_model/{model_name}.pth')'''

@@ -23,10 +23,10 @@ INPUT_DIM = 784
 HIDDEN_DIM_1 = 256
 HIDDEN_DIM_2 = 128
 LATENT_DIM = 20
-GROW_EPOCH = 3
+GROW_EPOCH = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 6
+NUM_EPOCHS = 50
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
@@ -55,67 +55,41 @@ BCE_loss = nn.BCELoss(reduction = 'sum')
 
 # Loss function
 def loss_function(x, x_recon, mean, log_var):
-
     reproduction_loss = BCE_loss(x_recon, x)
-    KLD      = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
+    KLD      =  - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
     return reproduction_loss + KLD
 
 ''' Trainning per epoch function
 '''
-def train(model, epoch, tqdm_loop, loss_function, optimizer):
+def train(model, tqdm_loop, loss_function, optimizer):
     train_loss = 0
     sum_elbo = 0
     elbo = 0
-    # First epoch training
-    if epoch == 0:
-        model.train()
-        for batch_idx, (x, _) in tqdm_loop:
-            # flatten the imput image
-            x = x.view(-1, 28*28)
-            x = x.to(DEVICE)
-            # pass the input to the model
-            x_recon, mu, log_var = model(x)
+    for batch_idx, (x, _) in tqdm_loop:
+        # flatten the imput image
+        x = x.view(-1, 28*28)
+        x = x.to(DEVICE)
+        # pass the input to the model
+        x_recon, mu, log_var = model(x)
 
-            # calculate the loss
-            total_loss = loss_function(x, x_recon, mu, log_var)
+        # calculate the loss
+        total_loss = loss_function(x, x_recon, mu, log_var)
 
-            # sum the losses over the batches
-            train_loss += total_loss.item()
+        # sum the losses over the batches
+        train_loss += total_loss.item()
 
-            # calculate elbo for each batch
-            elbo = measure_ELBO(x, model, L_SAMPLE)
-            sum_elbo += elbo
+        # calculate elbo for each batch
+        elbo = measure_ELBO(x, model, L_SAMPLE)
+        sum_elbo += elbo
 
-            optimizer.zero_grad() # clear the gradients
+        #print(f"Total loss before .item(): {total_loss}")
 
-            # update the progress bar
-            tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
-    else:
-        for batch_idx, (x, _) in tqdm_loop:
-            # flatten the imput image
-            x = x.view(-1, 28*28)
-            x = x.to(DEVICE)
-            # pass the input to the model
-            x_recon, mu, log_var = model(x)
+        optimizer.zero_grad()   # clear the gradients
+        total_loss.backward()   # back-propagation
+        optimizer.step()        # update the weights
 
-            # calculate the loss
-            total_loss = loss_function(x, x_recon, mu, log_var)
-
-            # sum the losses over the batches
-            train_loss += total_loss.item()
-
-            # calculate elbo for each batch
-            elbo = measure_ELBO(x, model, L_SAMPLE)
-            sum_elbo += elbo
-
-            #print(f"Total loss before .item(): {total_loss}")
-
-            optimizer.zero_grad()   # clear the gradients
-            total_loss.backward()   # back-propagation
-            optimizer.step()        # update the weights
-
-            # update the progress bar
-            tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
+        # update the progress bar
+        tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
 
     # Return: - the average loss over number of data points
     #         - the average elbo over number of batches
@@ -139,22 +113,22 @@ def measure_ELBO(x, model, L):
     _, mu, logvar = model(x)
 
     # Initialize the log-probabilities
-    logp_theta = 0  # logp_theta(x,z)
-    logq_phi = 0    # logq_phi(z|x)
+    logp_theta = 0.0  # logp_theta(x,z)
+    logq_phi = 0.0    # logq_phi(z|x)
 
     for l in range(L):
         # sample z from the latent space with the reparametrization trick
         z = model.reparametrization(mu, logvar)
 
         # calculate the logp_theta(x,z) = logp(x|z) + logp(z)
-        logp_theta -= BCE_loss(model.decoder(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
+        logp_theta += -BCE_loss(model.decoder(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
         logp_theta += torch.sum(-0.5 * torch.pow(z, 2) - 0.5 * torch.log(torch.tensor(2 * np.pi))) # adding term logp(z) = log(N(0,1))
 
         # calculate the logq_phi(z|x)
         logq_phi += torch.sum( -0.5 * (torch.pow(z - mu, 2)/ torch.exp(logvar) + logvar + torch.log(torch.tensor(2*np.pi))))
     
     # calculate the ELBO
-    ELBO = 1/L * (logp_theta - logq_phi)
+    ELBO = 1/L * logp_theta - logq_phi
     return ELBO.cpu().detach().numpy()
 
 ''' 
@@ -220,14 +194,14 @@ for epoch in range(NUM_EPOCHS):
 
     # Training
     loop = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model)', leave=False)
-    train_loss, elbos = train(model, epoch, loop, loss_function, optimizer)
+    train_loss, elbos = train(model, loop, loss_function, optimizer)
     train_loss_list.append(train_loss)
     train_elbos.append(elbos)
 
     if 'model_growth' in locals():
         # Train the growth model parallelly
         loop_growth = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model_growth)', leave=False)
-        train_loss_growth, elbos_growth = train(model_growth, epoch, loop_growth, loss_function, growth_optimizer)
+        train_loss_growth, elbos_growth = train(model_growth, loop_growth, loss_function, growth_optimizer)
         train_loss_growth_list.append(train_loss_growth)
         train_elbos_growth.append(elbos_growth)
 
@@ -250,15 +224,12 @@ print(f"Final model growth: ", model_growth)
 print(f'Losses list size: {len(train_info["loss_list"])}')
 print(f'Losses growth list size: {len(train_info["loss_growth_list"])}')
 
-print(f"Model's losses: ", train_loss_list)
-print(f"Model growth's losses: ", train_loss_growth_list)
 
 # Mark end time
 end_time = time.time()
 elapsed_time = end_time - start_time
 
 print(f"Training completed in {elapsed_time:.2f} seconds")
-
 
 # Save the training loss list to a file
 with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
@@ -274,8 +245,8 @@ fig, ax1 = plt.subplots(figsize=(8, 5))
 epochs = range(1, len(train_info['loss_list']) + 1)
 
 # Plot LOSS on the first y-axis
-ax1.plot(epochs, train_info['loss_list'], label='Training Loss', color='b')
-ax1.plot(epochs, train_info['loss_growth_list'], label='Training Loss Growth', color='g')
+line1, = ax1.plot(epochs, train_info['loss_list'], label='Training Loss', color='b')
+line2, = ax1.plot(epochs, train_info['loss_growth_list'], label='Training Loss Growth', color='g')
 ax1.set_xlabel('Epochs')
 ax1.set_ylabel('Loss')
 ax1.tick_params(axis='y')
@@ -290,14 +261,18 @@ ax1.set_xticks(np.arange(0, len(epochs) + 1, 5))
 
 # Create a second y-axis for ELBO
 ax2 = ax1.twinx()
-ax2.plot(epochs, train_info['elbos'], label='ELBO', color='r')
-ax2.plot(epochs, train_info['elbos_growth'], label='ELBO Growth', color='y')
+line3, = ax2.plot(epochs, train_info['elbos'], label='ELBO', color='r')
+line4, = ax2.plot(epochs, train_info['elbos_growth'], label='ELBO Growth', color='y')
 ax2.set_ylabel('ELBO')
 ax2.tick_params(axis='y')
 
+# Combine legends
+lines = [line1, line2, line3, line4]
+labels = [line.get_label() for line in lines]
+ax1.legend(lines, labels, loc='upper left', prop={'size': 8})
+
 # Add labels and title
 plt.title('Training Loss and ELBO by Epoch')
-plt.legend()
 fig.tight_layout()  # Adjust layout to make room for both y-axes
 plt.savefig(f'{model_name}.png')
 plt.show()

@@ -31,7 +31,7 @@ LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
-L_SAMPLE = 10
+L_SAMPLE = 1
 NB_NODE_ADD_1 = 64
 NB_NODE_ADD_2 = 32
 
@@ -141,7 +141,7 @@ def func_expand_layer(model, idx_layer, nb_node, epoch):
 
 ''' Define the model '''
 encoder_config = [HIDDEN_DIM_1, HIDDEN_DIM_2, LATENT_DIM]
-decoder_config = [HIDDEN_DIM_2, HIDDEN_DIM_1, INPUT_DIM]
+decoder_config = [128, 256, INPUT_DIM]
 
 # Define the date
 date = time.strftime("%Y%m%d")
@@ -233,9 +233,10 @@ elapsed_time = end_time - start_time
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
 # Save the training loss list to a file
+'''
 with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
     json.dump(train_info, f)
-
+'''
 # save the model
 torch.save(model_growth.state_dict(), f'saved_model/{model_name}.pth')
 
@@ -275,5 +276,5 @@ ax1.legend(lines, labels, loc='upper left', prop={'size': 8})
 # Add labels and title
 plt.title('Training Loss and ELBO by Epoch')
 fig.tight_layout()  # Adjust layout to make room for both y-axes
-plt.savefig(f'{model_name}.png')
+plt.savefig(f'img/{model_name}.png')
 plt.show()

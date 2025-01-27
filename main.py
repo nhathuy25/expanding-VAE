@@ -20,20 +20,20 @@ import numpy as np
 
 # Configurations
 INPUT_DIM = 784
-HIDDEN_DIM_1 = 128
-HIDDEN_DIM_2 = 64
+HIDDEN_DIM_1 = 64
+HIDDEN_DIM_2 = 32
 LATENT_DIM = 20
-GROW_EPOCH = 10
+GROW_EPOCH = 2
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 50
-LEARNING_RATE = 1e-2
+NUM_EPOCHS = 5
+LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
 L_SAMPLE = 10
-NB_NODE_ADD_1 = 50
-NB_NODE_ADD_2 = 25
+NB_NODE_ADD_1 = 64
+NB_NODE_ADD_2 = 32
 
 # Set the name for the model for saving
 model_name = f'VAE_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
@@ -111,34 +111,20 @@ Inputs: - x: the datapoint
         - L: the number of samples to be drawn from the latent space
 
 Outputs: - scalar value (unbiased stochastic estimate lower bound on logp_theta(x))
-
 '''
 def measure_ELBO(x, model, L):
-    '''# assert the input shaped to vector tensor
-    assert x.shape == (-1, 28*28)
-    x = x.to(DEVICE)'''
-
-    # pass the input to the model, collect mean and logvar of latent code
-    _, mu, logvar = model(x)
-
-    # Initialize the log-probabilities
-    logp_theta = 0.0  # logp_theta(x,z)
-    logq_phi = 0.0    # logq_phi(z|x)
-
-    for l in range(L):
-        # sample z from the latent space with the reparametrization trick
-        z = model.reparametrization(mu, logvar)
-
-        # calculate the logp_theta(x,z) = logp(x|z) + logp(z)
-        logp_theta += -BCE_loss(model.decode(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
-        logp_theta += torch.sum(-0.5 * torch.pow(z, 2) - 0.5 * torch.log(torch.tensor(2 * np.pi))) # adding term logp(z) = log(N(0,1))
-
-        # calculate the logq_phi(z|x)
-        logq_phi += torch.sum( -0.5 * (torch.pow(z - mu, 2)/ torch.exp(logvar) + logvar + torch.log(torch.tensor(2*np.pi))))
     
-    # calculate the ELBO
-    ELBO = 1/L * logp_theta - logq_phi
-    return ELBO.cpu().detach().numpy()
+    _, mu_z, logvar_z = model(x)
+    ELBO = 0
+    for l in range(L):
+        
+        z = model.reparametrization(mu_z, logvar_z)
+
+        ELBO += -loss_function(x, model.decode(z), mu_z, logvar_z)
+
+    ELBO = ELBO/L
+    return ELBO.cpu().detach().numpy()    
+
 
 ''' 
 Adding nodes to the expands an ENCODER'S LAYER function

@@ -8,7 +8,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch import nn
-from model import VAE, VAE_expanding
+from model import VAE_expanding
 from tqdm import tqdm
 import time
 import json
@@ -27,16 +27,16 @@ GROW_EPOCH = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NUM_EPOCHS = 50
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-2
 BATCH_SIZE = 128
 
 # Expanding configurations
 L_SAMPLE = 10
-NB_NODE_ADD_1 = 5
-NB_NODE_ADD_2 = 2
+NB_NODE_ADD_1 = 50
+NB_NODE_ADD_2 = 25
 
 # Set the name for the model for saving
-model_name = f'VAE_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
+model_name = f'VAE_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
 
 # ------------------------
 
@@ -74,6 +74,10 @@ def train(model, tqdm_loop, loss_function, optimizer):
 
         # calculate the loss
         total_loss = loss_function(x, x_recon, mu, log_var)
+
+        '''reproduction_loss = BCE_loss(x_recon, x)
+        KLD =  - 0.5 * torch.sum(1+ log_var - mu.pow(2) - log_var.exp())
+        total_loss = reproduction_loss + KLD'''
 
         # sum the losses over the batches
         train_loss += total_loss.item()
@@ -126,7 +130,7 @@ def measure_ELBO(x, model, L):
         z = model.reparametrization(mu, logvar)
 
         # calculate the logp_theta(x,z) = logp(x|z) + logp(z)
-        logp_theta += -BCE_loss(model.decoder(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
+        logp_theta += -BCE_loss(model.decode(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
         logp_theta += torch.sum(-0.5 * torch.pow(z, 2) - 0.5 * torch.log(torch.tensor(2 * np.pi))) # adding term logp(z) = log(N(0,1))
 
         # calculate the logq_phi(z|x)
@@ -160,7 +164,7 @@ model = VAE_expanding((28, 28), device=DEVICE)
 model.construct(encoder_config, decoder_config, False)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
+#optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 ''' 
 TRAINING PART 
 '''
@@ -200,6 +204,7 @@ for epoch in range(NUM_EPOCHS):
         # Adding nodse to the second layer of encoder
         func_expand_layer(model_growth, 2, NB_NODE_ADD_2, epoch+1)
         growth_optimizer = torch.optim.Adam(model_growth.parameters(), lr=LEARNING_RATE)
+        #growth_optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
     # Training
     loop = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model)', leave=False)
@@ -223,9 +228,10 @@ train_elbos_growth = initial_elbos + train_elbos_growth
 
 # Save the losses and elbos to the dictionary
 train_info['loss_list'] = train_loss_list
-train_info['loss_growth_list'] = train_loss_growth_list
 train_info['elbos'] = train_elbos
-train_info['elbos_growth'] = train_elbos_growth
+if 'model_growth' in locals():
+    train_info['loss_growth_list'] = train_loss_growth_list
+    train_info['elbos_growth'] = train_elbos_growth
 
 ''' End of training & saving the model '''
 print(f"Final model: ", model)

@@ -20,8 +20,8 @@ import numpy as np
 
 # Configurations
 INPUT_DIM = 784
-HIDDEN_DIM_1 = 256
-HIDDEN_DIM_2 = 128
+HIDDEN_DIM_1 = 128
+HIDDEN_DIM_2 = 64
 LATENT_DIM = 20
 GROW_EPOCH = 10
 
@@ -31,9 +31,9 @@ LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
-L_SAMPLE = 3
-NB_NODE_ADD_1 = 50
-NB_NODE_ADD_2 = 25
+L_SAMPLE = 10
+NB_NODE_ADD_1 = 5
+NB_NODE_ADD_2 = 2
 
 # Set the name for the model for saving
 model_name = f'VAE_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
@@ -89,7 +89,12 @@ def train(model, tqdm_loop, loss_function, optimizer):
         optimizer.step()        # update the weights
 
         # update the progress bar
-        tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1))
+        #tqdm_loop.set_postfix(loss=train_loss/(batch_idx*BATCH_SIZE+1)) primary code
+        tqdm_loop.set_postfix(
+            loss=train_loss / (batch_idx * BATCH_SIZE + 1),
+            gradient=torch.norm(torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None]))
+        )
+
 
     # Return: - the average loss over number of data points
     #         - the average elbo over number of batches
@@ -181,8 +186,12 @@ train_elbos_growth = []
 
 model.train()
 for epoch in range(NUM_EPOCHS):
-    # Expanding the model
-    if (epoch+1) % GROW_EPOCH == 0 and epoch != 0:
+    """ Expanding the model if:
+        - The current epoch is a multiple of GROW_EPOCH
+        - The current epoch is not the first epoch
+        - The current epoch is not the last epoch 
+    """
+    if (epoch+1) % GROW_EPOCH == 0 and epoch != 0 and epoch+1 != NUM_EPOCHS:
         # Adding growth epoch info
         train_info['growth_epoch'].append(epoch)
         model_growth = copy.deepcopy(model) if epoch+1 == GROW_EPOCH else copy.deepcopy(model_growth)
@@ -236,9 +245,9 @@ with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
     json.dump(train_info, f)
 
 # save the model
-torch.save(model.state_dict(), f'saved_model/{model_name}.pth')
+torch.save(model_growth.state_dict(), f'saved_model/{model_name}.pth')
 
-#------------------------ Plot
+#------------------------ Plot ------------------------
 import matplotlib.pyplot as plt
 # Plot the training loss
 fig, ax1 = plt.subplots(figsize=(8, 5))

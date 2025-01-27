@@ -42,7 +42,7 @@ model_name = f'VAE_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
 
 ''' Load the MNIST dataset '''
 data_transform = transforms.Compose([transforms.ToTensor()])
-dataset = datasets.FashionMNIST(root='dataset/', train=True, transform=data_transform, download=True)
+dataset = datasets.MNIST(root='dataset/', train=True, transform=data_transform, download=True)
 
 train_loader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
 

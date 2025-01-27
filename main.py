@@ -26,9 +26,10 @@ LATENT_DIM = 20
 GROW_EPOCH = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 50
+NUM_EPOCHS = 5
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
+
 
 # Expanding configurations
 L_SAMPLE = 1
@@ -36,13 +37,13 @@ NB_NODE_ADD_1 = 64
 NB_NODE_ADD_2 = 32
 
 # Set the name for the model for saving
-model_name = f'VAE_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
+model_name = f'VAE_FashionMNIST_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
 
 # ------------------------
 
 ''' Load the MNIST dataset '''
 data_transform = transforms.Compose([transforms.ToTensor()])
-dataset = datasets.MNIST(root='dataset/', train=True, transform=data_transform, download=True)
+dataset = datasets.FashionMNIST(root='dataset/', train=True, transform=data_transform, download=True)
 
 train_loader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -141,7 +142,7 @@ def func_expand_layer(model, idx_layer, nb_node, epoch):
 
 ''' Define the model '''
 encoder_config = [HIDDEN_DIM_1, HIDDEN_DIM_2, LATENT_DIM]
-decoder_config = [256, 128, INPUT_DIM]
+decoder_config = [128, 256, INPUT_DIM]
 
 # Define the date
 date = time.strftime("%Y%m%d")
@@ -150,7 +151,12 @@ model = VAE_expanding((28, 28), device=DEVICE)
 model.construct(encoder_config, decoder_config, False)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-#optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
+
+for (x, y) in train_loader:
+    print('Min Pixel Value: {} \nMax Pixel Value: {}'.format(x.min(), x.max()))
+    print('Mean Pixel Value {} \nPixel Values Std: {}'.format(x.float().mean(), x.float().std()))
+    break
 ''' 
 TRAINING PART 
 '''
@@ -254,7 +260,7 @@ ax1.tick_params(axis='y')
 
 # Add vertical dashed lines at x % 5 == 0
 for x in epochs:
-    if x % GROW_EPOCH == 0:
+    if x % GROW_EPOCH == 0 and x != NUM_EPOCHS:
         ax1.axvline(x=x, color='gray', linestyle='--', linewidth=0.5)
 
 # Set x-axis to display every 5th epoch

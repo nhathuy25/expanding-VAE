@@ -23,10 +23,10 @@ INPUT_DIM = 784
 HIDDEN_DIM_1 = 128
 HIDDEN_DIM_2 = 64
 LATENT_DIM = 20
-GROW_EPOCH = 10
+GROW_EPOCH = 3
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 50
+NUM_EPOCHS = 6
 LEARNING_RATE = 1e-2
 BATCH_SIZE = 128
 
@@ -247,8 +247,10 @@ elapsed_time = end_time - start_time
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
 # Save the training loss list to a file
+import orjson
+
 with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
-    json.dump(train_info, f)
+    f.write(orjson.dumps(train_info, option=orjson.OPT_SERIALIZE_NUMPY))
 
 # save the model
 torch.save(model_growth.state_dict(), f'saved_model/{model_name}.pth')

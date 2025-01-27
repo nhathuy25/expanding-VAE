@@ -20,20 +20,20 @@ import numpy as np
 
 # Configurations
 INPUT_DIM = 784
-HIDDEN_DIM_1 = 128
-HIDDEN_DIM_2 = 64
+HIDDEN_DIM_1 = 64
+HIDDEN_DIM_2 = 32
 LATENT_DIM = 20
-GROW_EPOCH = 3
+GROW_EPOCH = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 6
-LEARNING_RATE = 1e-2
+NUM_EPOCHS = 50
+LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
-L_SAMPLE = 10
-NB_NODE_ADD_1 = 50
-NB_NODE_ADD_2 = 25
+L_SAMPLE = 1
+NB_NODE_ADD_1 = 64
+NB_NODE_ADD_2 = 32
 
 # Set the name for the model for saving
 model_name = f'VAE_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
@@ -130,14 +130,14 @@ def measure_ELBO(x, model, L):
         z = model.reparametrization(mu, logvar)
 
         # calculate the logp_theta(x,z) = logp(x|z) + logp(z)
-        logp_theta += -BCE_loss(model.decode(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
+        logp_theta += BCE_loss(model.decode(z), x)     # adding term logp(x|z) = -BCE(decoder(z), x)
         logp_theta += torch.sum(-0.5 * torch.pow(z, 2) - 0.5 * torch.log(torch.tensor(2 * np.pi))) # adding term logp(z) = log(N(0,1))
 
         # calculate the logq_phi(z|x)
-        logq_phi += torch.sum( -0.5 * (torch.pow(z - mu, 2)/ torch.exp(logvar) + logvar + torch.log(torch.tensor(2*np.pi))))
+        logq_phi += -torch.sum( -0.5 * (torch.pow(z - mu, 2)/ torch.exp(logvar) + logvar + torch.log(torch.tensor(2*np.pi))))
     
     # calculate the ELBO
-    ELBO = 1/L * logp_theta - logq_phi
+    ELBO = 1/L * (logp_theta - logq_phi)
     return ELBO.cpu().detach().numpy()
 
 ''' 
@@ -247,11 +247,12 @@ elapsed_time = end_time - start_time
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
 # Save the training loss list to a file
+'''
 import orjson
 
 with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
     f.write(orjson.dumps(train_info, option=orjson.OPT_SERIALIZE_NUMPY))
-
+'''
 # save the model
 torch.save(model_growth.state_dict(), f'saved_model/{model_name}.pth')
 
@@ -270,7 +271,7 @@ ax1.tick_params(axis='y')
 
 # Add vertical dashed lines at x % 5 == 0
 for x in epochs:
-    if x % GROW_EPOCH == 0:
+    if x % GROW_EPOCH == 0 and x != NUM_EPOCHS:
         ax1.axvline(x=x, color='gray', linestyle='--', linewidth=0.5)
 
 # Set x-axis to display every 5th epoch

@@ -23,11 +23,10 @@ INPUT_DIM = 784
 HIDDEN_DIM_1 = 128
 HIDDEN_DIM_2 = 64
 LATENT_DIM = 20
-GROW_EPOCH = 10
-
+GROW_EPOCH = 3
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 50
-LEARNING_RATE = 1e-3
+NUM_EPOCHS = 5
+LEARNING_RATE = 1e-2
 BATCH_SIZE = 128
 
 # Expanding configurations
@@ -43,6 +42,7 @@ model_name = f'VAE_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}'
 ''' Load the MNIST dataset '''
 data_transform = transforms.Compose([transforms.ToTensor()])
 dataset = datasets.MNIST(root='dataset/', train=True, transform=data_transform, download=True)
+#dataset = datasets.FashionMNIST(root='dataset/', train=True, transform=data_transform, download=True)
 
 train_loader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -169,12 +169,12 @@ TRAINING PART
 # Mark start time
 start_time = time.time()
 
-train_info = {
+train_info: Dict[str, List[float]] = {
     'growth_epoch': [],
     'loss_list': [],
-    'loss_growth_list': [], # Adding loss list for the growth model
+    'loss_growth_list': [],
     'elbos': [],
-    'elbos_growth': [] # Adding elbo list for the growth model
+    'elbos_growth': []
 }
 
 train_loss_list = []
@@ -223,9 +223,11 @@ train_elbos_growth = initial_elbos + train_elbos_growth
 
 # Save the losses and elbos to the dictionary
 train_info['loss_list'] = train_loss_list
-train_info['loss_growth_list'] = train_loss_growth_list
 train_info['elbos'] = train_elbos
-train_info['elbos_growth'] = train_elbos_growth
+if 'model_growth' in locals():
+    train_info['loss_growth_list'] = train_loss_growth_list
+    train_info['elbos_growth'] = train_elbos_growth
+
 
 ''' End of training & saving the model '''
 print(f"Final model: ", model)
@@ -241,8 +243,10 @@ elapsed_time = end_time - start_time
 print(f"Training completed in {elapsed_time:.2f} seconds")
 
 # Save the training loss list to a file
-with open(f'saved_train-info/train_info{model_name}.json', 'w') as f:
-    json.dump(train_info, f)
+import orjson
+
+with open("train_info.json", "wb") as f:
+    f.write(orjson.dumps(train_info, option=orjson.OPT_SERIALIZE_NUMPY))
 
 # save the model
 torch.save(model_growth.state_dict(), f'saved_model/{model_name}.pth')

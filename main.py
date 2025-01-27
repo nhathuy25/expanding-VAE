@@ -245,7 +245,7 @@ print(f"Training completed in {elapsed_time:.2f} seconds")
 # Save the training loss list to a file
 import orjson
 
-with open("train_info.json", "wb") as f:
+with open(f"saved_train-info/train_info{model_name}.json", "wb") as f:
     f.write(orjson.dumps(train_info, option=orjson.OPT_SERIALIZE_NUMPY))
 
 # save the model

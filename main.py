@@ -31,7 +31,7 @@ LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
-L_SAMPLE = 20
+L_SAMPLE = 1
 NB_NODE_ADD_1 = 32
 NB_NODE_ADD_2 = 16
 

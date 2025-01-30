@@ -36,7 +36,7 @@ NB_NODE_ADD_1 = 32
 NB_NODE_ADD_2 = 16
 
 # Set the name for the model for saving
-model_name = f'VAE3_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}_hid64_hid32'
+model_name = f'VAE3_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}_hid{HIDDEN_DIM_1}_hid{HIDDEN_DIM_2}'
 
 # ------------------------
 

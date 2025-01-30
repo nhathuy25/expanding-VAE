@@ -23,20 +23,20 @@ INPUT_DIM = 784
 HIDDEN_DIM_1 = 64
 HIDDEN_DIM_2 = 32
 LATENT_DIM = 20
-GROW_EPOCH = 10
+GROW_EPOCH = 50
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 50
+NUM_EPOCHS = 200
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
 # Expanding configurations
-L_SAMPLE = 1
-NB_NODE_ADD_1 = 32
-NB_NODE_ADD_2 = 16
+L_SAMPLE = 20
+NB_NODE_ADD_1 = 64
+NB_NODE_ADD_2 = 32
 
 # Set the name for the model for saving
-model_name = f'VAE2_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}_hid32_hid16'
+model_name = f'VAE3_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}_hid64_hid32'
 
 # ------------------------
 
@@ -260,11 +260,11 @@ ax1.tick_params(axis='y')
 
 # Add vertical dashed lines at x % 5 == 0
 for x in epochs:
-    if x % GROW_EPOCH == 0:
+    if x % GROW_EPOCH == 0 and x != NUM_EPOCHS:
         ax1.axvline(x=x, color='gray', linestyle='--', linewidth=0.5)
 
 # Set x-axis to display every 5th epoch
-ax1.set_xticks(np.arange(0, len(epochs) + 1, 10))
+ax1.set_xticks(np.arange(0, len(epochs) + 1, 25))
 
 # Create a second y-axis for ELBO
 ax2 = ax1.twinx()

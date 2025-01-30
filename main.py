@@ -20,10 +20,10 @@ import numpy as np
 
 # Configurations
 INPUT_DIM = 784
-HIDDEN_DIM_1 = 64
-HIDDEN_DIM_2 = 32
+HIDDEN_DIM_1 = 32
+HIDDEN_DIM_2 = 16
 LATENT_DIM = 20
-GROW_EPOCH = 50
+GROW_EPOCH = 25
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NUM_EPOCHS = 200
@@ -32,8 +32,8 @@ BATCH_SIZE = 128
 
 # Expanding configurations
 L_SAMPLE = 20
-NB_NODE_ADD_1 = 64
-NB_NODE_ADD_2 = 32
+NB_NODE_ADD_1 = 32
+NB_NODE_ADD_2 = 16
 
 # Set the name for the model for saving
 model_name = f'VAE3_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}_hid64_hid32'

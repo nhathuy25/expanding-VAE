@@ -20,13 +20,13 @@ import numpy as np
 
 # Configurations
 INPUT_DIM = 784
-HIDDEN_DIM_1 = 32
-HIDDEN_DIM_2 = 16
+HIDDEN_DIM_1 = 64
+HIDDEN_DIM_2 = 32
 LATENT_DIM = 20
-GROW_EPOCH = 25
+GROW_EPOCH = 10
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-NUM_EPOCHS = 200
+NUM_EPOCHS = 50
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 128
 
@@ -36,7 +36,7 @@ NB_NODE_ADD_1 = 32
 NB_NODE_ADD_2 = 16
 
 # Set the name for the model for saving
-model_name = f'VAE3_gaussianX_{NUM_EPOCHS}_{BATCH_SIZE}_{LATENT_DIM}_{L_SAMPLE}_hid{HIDDEN_DIM_1}_hid{HIDDEN_DIM_2}'
+model_name = f'VAE3-1_{NUM_EPOCHS}_{LATENT_DIM}_{L_SAMPLE}_hid{HIDDEN_DIM_1}_hid{HIDDEN_DIM_2}_{GROW_EPOCH}'
 
 # ------------------------
 
@@ -147,8 +147,14 @@ decoder_config = [128, 256, INPUT_DIM]
 # Define the date
 date = time.strftime("%Y%m%d")
 
+# Origirnal model
 model = VAE_expanding((28, 28), device=DEVICE)
 model.construct(encoder_config, decoder_config, False)
+
+# Growth model (approach 2-1)
+model_growth = VAE_expanding((28, 28), device=DEVICE) 
+model_growth.construct(encoder_growth_config, decoder_config, False)
+growth_optimizer = torch.optim.Adam(model_growth.parameters(), lr=LEARNING_RATE)   
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 #optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
@@ -185,12 +191,14 @@ for epoch in range(NUM_EPOCHS):
     if (epoch+1) % GROW_EPOCH == 0 and epoch != 0 and epoch+1 != NUM_EPOCHS:
         # Adding growth epoch info
         train_info['growth_epoch'].append(epoch)
+        #model_growth = copy.deepcopy(model) if epoch+1 == GROW_EPOCH else copy.deepcopy(model_growth) # Approach 1
+        '''Approach 2
         if epoch+1 == GROW_EPOCH:
           model_growth = VAE_expanding((28, 28), device=DEVICE)
           model_growth.construct(encoder_growth_config, decoder_config, False)
         else:
           copy.deepcopy(model_growth)
-        #model_growth = copy.deepcopy(model) if epoch+1 == GROW_EPOCH else copy.deepcopy(model_growth) # Previous implementation
+        '''
         # Adding nodes to the first layer of encoder
         func_expand_layer(model_growth, 0, NB_NODE_ADD_1, epoch+1)
         # Adding nodse to the second layer of encoder
@@ -205,12 +213,12 @@ for epoch in range(NUM_EPOCHS):
     train_loss_list.append(train_loss)
     train_elbos.append(elbos)
 
-    if 'model_growth' in locals():
-        # Train the growth model parallelly
-        loop_growth = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model_growth)', leave=False)
-        train_loss_growth, elbos_growth = train(model_growth, loop_growth, loss_function, growth_optimizer)
-        train_loss_growth_list.append(train_loss_growth)
-        train_elbos_growth.append(elbos_growth)
+    #if 'model_growth' in locals():
+    # Train the growth model parallelly
+    loop_growth = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{NUM_EPOCHS} (model_growth)', leave=False)
+    train_loss_growth, elbos_growth = train(model_growth, loop_growth, loss_function, growth_optimizer)
+    train_loss_growth_list.append(train_loss_growth)
+    train_elbos_growth.append(elbos_growth)
 
 # Copy the initial losses (before first growing epoch) to the growth model's loss list and elbos list
 initial_losses = train_loss_list[:GROW_EPOCH-1]
@@ -264,7 +272,7 @@ for x in epochs:
         ax1.axvline(x=x, color='gray', linestyle='--', linewidth=0.5)
 
 # Set x-axis to display every 5th epoch
-ax1.set_xticks(np.arange(0, len(epochs) + 1, 25))
+ax1.set_xticks(np.arange(0, len(epochs) + 1, 10))
 
 # Create a second y-axis for ELBO
 ax2 = ax1.twinx()

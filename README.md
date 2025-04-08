@@ -1,4 +1,4 @@
-# Progressive Expandsion of MLP Layers in Variational Autoencoders (VAEs)
+# Progressive Expansion of MLP Layers in Variational Autoencoders (VAEs)
 
 ## 1. Overview
 

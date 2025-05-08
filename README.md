@@ -1,5 +1,7 @@
 # Progressive Expansion of MLP Layers in Variational Autoencoders (VAEs)
 
+Huy NGUYEN, Quoc Tan NGUYEN
+
 ## 1. Overview
 
 This repository contains an implementation of an experimental approach to Variational Autoencoders (VAEs). It focuses on expanding the number of neurons in the dense encoder layers to assess the impact on model performance. The project demonstrates how a progressive increase in network capacity, tested on the MNIST dataset, affects both the reconstruction and generation of images.
